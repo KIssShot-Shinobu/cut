@@ -114,6 +114,33 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def generate_thumbnail(video_path, output_path, timestamp='00:00:01'):
+    """Generate thumbnail from video at specified timestamp"""
+    try:
+        cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-ss', timestamp,
+            '-vframes', '1',
+            '-vf', 'scale=320:-1',
+            '-y',  # Overwrite output file
+            output_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0 and os.path.exists(output_path):
+            logger.info(f"Thumbnail generated: {output_path}")
+            return True
+        else:
+            logger.error(f"Thumbnail generation failed: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error generating thumbnail: {e}")
+        return False
+
+
 def get_video_duration(video_path):
     """Get video duration using ffprobe"""
     try:
@@ -167,17 +194,24 @@ def split_video(input_path, output_dir, base_name, segment_duration=SEGMENT_DURA
         if result.returncode != 0:
             return None, f"FFmpeg error: {result.stderr}"
         
-        # Get list of created files
+        # Get list of created files and generate thumbnails
         output_files = []
         for i in range(num_segments):
             file_name = f"{base_name}_part{i:03d}{file_ext}"
             file_path = os.path.join(output_dir, file_name)
             if os.path.exists(file_path):
                 file_size = os.path.getsize(file_path)
+                
+                # Generate thumbnail for this part
+                thumb_name = f"{base_name}_part{i:03d}_thumb.jpg"
+                thumb_path = os.path.join(output_dir, thumb_name)
+                has_thumbnail = generate_thumbnail(file_path, thumb_path)
+                
                 output_files.append({
                     'filename': file_name,
                     'size': file_size,
-                    'size_mb': round(file_size / (1024 * 1024), 2)
+                    'size_mb': round(file_size / (1024 * 1024), 2),
+                    'thumbnail': thumb_name if has_thumbnail else None
                 })
         
         return {

@@ -327,7 +327,15 @@ function createSegmentCard(file, segmentNumber) {
     card.className = 'segment-card';
     card.style.animationDelay = `${segmentNumber * 0.05}s`;
 
+    // Build thumbnail HTML if available
+    const thumbnailHtml = file.thumbnail
+        ? `<div class="segment-thumbnail">
+               <img src="/download/${outputDir}/${file.thumbnail}" alt="Part ${segmentNumber} thumbnail" />
+           </div>`
+        : '';
+
     card.innerHTML = `
+        ${thumbnailHtml}
         <div class="segment-info">
             <h3>Part ${segmentNumber}</h3>
             <p>${file.filename} • ${file.size_mb} MB</p>
