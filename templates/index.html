@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Splitter - Professional Video Processing</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}">
+</head>
+
+<body>
+    <!-- Hamburger Menu Button (Mobile/Tablet Only) -->
+    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Menu">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <!-- Sidebar Menu -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3>Menu</h3>
+            <button class="sidebar-close" id="sidebarClose">&times;</button>
+        </div>
+        <div class="sidebar-content">
+            <div class="sidebar-section">
+                <h4>🎨 Appearance</h4>
+                <div class="theme-options">
+                    <button class="theme-option active" data-theme="light">
+                        <span class="theme-icon">☀️</span>
+                        <span class="theme-label">Light</span>
+                    </button>
+                    <button class="theme-option" data-theme="dark">
+                        <span class="theme-icon">🌙</span>
+                        <span class="theme-label">Dark</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Desktop Theme Toggle (Visible on Desktop only) -->
+    <div class="desktop-theme-toggle" id="desktopThemeToggle">
+        <button class="theme-toggle-btn active" data-theme="light" title="Light Mode">
+            ☀️
+        </button>
+        <button class="theme-toggle-btn" data-theme="dark" title="Dark Mode">
+            🌙
+        </button>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>🎬 Video Splitter</h1>
+            <p class="subtitle">split your video into parts automatically</p>
+        </header>
+
+        <main>
+            <!-- Upload Section -->
+            <section class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <h2>Drag & Drop Video Here</h2>
+                    <p>or</p>
+                    <label for="fileInput" class="file-label">Choose Video File</label>
+                    <input type="file" id="fileInput" accept="video/*" style="display: none;">
+                    <p class="file-info">Format: MP4, AVI, MOV, MKV, FLV, WMV, WebM, MPEG (Max 2GB)</p>
+                </div>
+
+                <!-- Duration Configuration -->
+                <div class="duration-config" id="durationConfig" style="display: none;">
+                    <div class="duration-container">
+                        <div class="duration-header">
+                            <svg class="duration-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <h3>Duration Per Part</h3>
+                        </div>
+                        <div class="duration-controls">
+                            <select id="durationSelect" class="duration-select">
+                                <option value="60">1 Minute</option>
+                                <option value="180">3 Minutes</option>
+                                <option value="300" selected>5 Minutes</option>
+                                <option value="600">10 Minutes</option>
+                                <option value="900">15 Minutes</option>
+                                <option value="custom">Custom Duration</option>
+                            </select>
+                            <div class="custom-duration-input" id="customDurationInput" style="display: none;">
+                                <input type="number" id="customDuration" min="1" max="60" placeholder="Enter minutes">
+                                <span class="input-suffix">minutes</span>
+                            </div>
+                        </div>
+                        <p class="duration-info">Choose duration for each video segment</p>
+                        <button class="btn-process" id="processBtn">Process Video</button>
+                    </div>
+                </div>
+
+                <div class="file-selected" id="fileSelected" style="display: none;">
+                    <div class="file-details">
+                        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <div class="file-info-text">
+                            <p class="file-name" id="fileName"></p>
+                            <p class="file-size" id="fileSize"></p>
+                        </div>
+                    </div>
+                    <button class="btn-remove" id="removeBtn">Hapus</button>
+                </div>
+            </section>
+
+            <!-- Processing Section -->
+            <section class="processing-section" id="processingSection" style="display: none;">
+                <div class="progress-container">
+                    <div class="loader"></div>
+                    <h3>Processing Video...</h3>
+                    <p>Please wait, video is being split into parts</p>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <h2>✅ Video Successfully Split!</h2>
+                    <button class="btn-new" id="newVideoBtn">Split New Video</button>
+                </div>
+
+                <div class="video-info">
+                    <div class="info-card">
+                        <div class="info-label">Original Duration</div>
+                        <div class="info-value" id="originalDuration"></div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Total Parts</div>
+                        <div class="info-value" id="numSegments"></div>
+                    </div>
+                </div>
+
+                <div class="segments-container" id="segmentsContainer">
+                    <!-- Segments will be dynamically added here -->
+                </div>
+
+                <div class="download-all-container">
+                    <button class="btn-download-all" id="downloadAllBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download All Parts
+                    </button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-container">
+                    <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    <h3>An Error Occurred</h3>
+                    <p id="errorMessage"></p>
+                    <button class="btn-retry" id="retryBtn">Try Again</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>[DS]KissShot | Made with ❤️</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>
