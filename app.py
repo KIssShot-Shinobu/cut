@@ -45,6 +45,25 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 # Global progress tracker for SSE
 progress_tracker = {}
 
+# Session storage
+user_sessions = {}
+
+def update_progress(job_id, percent, message, status='processing', current_part=None, total_parts=None):
+    """Update progress for a job"""
+    progress_tracker[job_id] = {
+        'percent': percent,
+        'message': message,
+        'status': status,
+        'current_part': current_part,
+        'total_parts': total_parts,
+        'timestamp': time.time()
+    }
+
+def clear_progress(job_id):
+    """Clear progress data after completion"""
+    if job_id in progress_tracker:
+        del progress_tracker[job_id]
+
 # Create necessary directories
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -159,16 +178,25 @@ def get_video_duration(video_path):
         return None
 
 
-def split_video(input_path, output_dir, base_name, segment_duration=SEGMENT_DURATION):
+def split_video(input_path, output_dir, base_name, segment_duration=SEGMENT_DURATION, job_id=None):
     """Split video into segments using FFmpeg"""
     try:
+        # Initialize progress
+        if job_id:
+            update_progress(job_id, 0, "Analyzing video...", "processing")
+        
         # Get video duration
         duration = get_video_duration(input_path)
         if duration is None:
+            if job_id:
+                update_progress(job_id, 0, "Failed to get video duration", "error")
             return None, "Failed to get video duration"
         
         # Calculate number of segments
         num_segments = math.ceil(duration / segment_duration)
+        
+        if job_id:
+            update_progress(job_id, 5, f"Will create {num_segments} parts. Starting split...", "processing", 0, num_segments)
         
         # Get file extension
         file_ext = os.path.splitext(input_path)[1]
@@ -188,10 +216,15 @@ def split_video(input_path, output_dir, base_name, segment_duration=SEGMENT_DURA
             output_pattern
         ]
         
+        if job_id:
+            update_progress(job_id, 10, "Splitting video...", "processing", 0, num_segments)
+        
         # Run FFmpeg and wait for completion
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
+            if job_id:
+                update_progress(job_id, 0, f"FFmpeg error: {result.stderr}", "error")
             return None, f"FFmpeg error: {result.stderr}"
         
         # Get list of created files and generate thumbnails
@@ -213,6 +246,22 @@ def split_video(input_path, output_dir, base_name, segment_duration=SEGMENT_DURA
                     'size_mb': round(file_size / (1024 * 1024), 2),
                     'thumbnail': thumb_name if has_thumbnail else None
                 })
+                
+                # Update progress after each part is processed
+                if job_id:
+                    progress_percent = 10 + ((i + 1) / num_segments) * 85  # 10-95%
+                    update_progress(
+                        job_id, 
+                        int(progress_percent), 
+                        f"Processed part {i + 1} of {num_segments}", 
+                        "processing",
+                        i + 1,
+                        num_segments
+                    )
+        
+        # Final completion
+        if job_id:
+            update_progress(job_id, 100, "Video split completed!", "completed", num_segments, num_segments)
         
         return {
             'original_duration': round(duration, 2),
@@ -222,6 +271,8 @@ def split_video(input_path, output_dir, base_name, segment_duration=SEGMENT_DURA
         }, None
         
     except Exception as e:
+        if job_id:
+            update_progress(job_id, 0, f"Error splitting video: {str(e)}", "error")
         return None, f"Error splitting video: {str(e)}"
 
 
@@ -232,12 +283,56 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/progress/<job_id>')
+def progress_stream(job_id):
+    """SSE endpoint for progress updates"""
+    def generate():
+        """Generate Server-Sent Events"""
+        last_sent = None
+        timeout_start = time.time()
+        max_timeout = 300  # 5 minutes max
+        
+        while True:
+            # Check timeout
+            if time.time() - timeout_start > max_timeout:
+                yield f"data: {json.dumps({'status': 'timeout', 'message': 'Connection timeout'})}\n\n"
+                break
+            
+            # Get current progress
+            if job_id in progress_tracker:
+                current_progress = progress_tracker[job_id].copy()
+                
+                # Only send if changed
+                if current_progress != last_sent:
+                    yield f"data: {json.dumps(current_progress)}\n\n"
+                    last_sent = current_progress
+                    
+                    # Check if completed
+                    if current_progress.get('status') in ['completed', 'error']:
+                        break
+            
+            time.sleep(0.5)  # Poll every 500ms
+    
+    return Response(generate(), mimetype='text/event-stream')
+
 @app.route('/upload', methods=['POST'])
 @limiter.limit("10 per hour")
 def upload_video():
     """Handle video upload and splitting"""
     client_ip = request.remote_addr
     logger.info(f"Upload request from {client_ip}")
+    
+    # Get or create session
+    session_id = request.form.get('session_id')
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    
+    if session_id not in user_sessions:
+        user_sessions[session_id] = {
+            'uploads': [],
+            'created_at': time.time(),
+            'ip': client_ip
+        }
     
     try:
         # Check if file is present
@@ -264,6 +359,11 @@ def upload_video():
         filename = secure_filename(file.filename)
         base_name = os.path.splitext(filename)[0]
         
+        # Get job_id from request or generate new one
+        job_id = request.form.get('job_id')
+        if not job_id:
+            job_id = str(uuid.uuid4())
+        
         # Create unique output directory for this video
         output_dir = os.path.join(app.config['OUTPUT_FOLDER'], base_name)
         os.makedirs(output_dir, exist_ok=True)
@@ -272,12 +372,14 @@ def upload_video():
         upload_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(upload_path)
         
-        # Split video with custom duration
-        result, error = split_video(upload_path, output_dir, base_name, duration)
+        # Get file size before processing
+        upload_size = os.path.getsize(upload_path)
+        
+        # Split video with custom duration and job_id for progress tracking
+        result, error = split_video(upload_path, output_dir, base_name, duration, job_id)
         
         # Clean up uploaded file (with error handling for Windows)
         try:
-            import time
             time.sleep(0.5)  # Small delay to ensure FFmpeg releases file handle
             os.remove(upload_path)
         except Exception as cleanup_error:
@@ -290,11 +392,29 @@ def upload_video():
                 shutil.rmtree(output_dir)
             return jsonify({'error': error}), 500
         
+        if session_id in user_sessions and result:
+            user_sessions[session_id]['uploads'].insert(0, {
+                'filename': file.filename,
+                'timestamp': time.time(),
+                'size': upload_size,
+                'output_dir': base_name,
+                'parts': result.get('num_segments', 0),
+                'duration': result.get('original_duration', 0)
+            })
+            # Keep only last 10 uploads
+            if len(user_sessions[session_id]['uploads']) > 10:
+                user_sessions[session_id]['uploads'] = user_sessions[session_id]['uploads'][:10]
+        
+        # Clear progress after completion
+        clear_progress(job_id)
+        
         return jsonify({
             'success': True,
             'message': 'Video split successfully',
             'data': result,
-            'output_dir': base_name
+            'output_dir': base_name,
+            'session_id': session_id,
+            'job_id': job_id
         }), 200
         
     except Exception as e:

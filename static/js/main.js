@@ -35,6 +35,17 @@ const themeOptions = document.querySelectorAll('.theme-option');
 // Desktop theme toggle elements
 const desktopThemeToggle = document.getElementById('desktopThemeToggle');
 const desktopThemeButtons = desktopThemeToggle.querySelectorAll('.theme-toggle-btn');
+const recentUploads = document.getElementById('recentUploads');
+
+// Progress bar elements
+const progressBar = document.getElementById('progressBar');
+const progressPercent = document.getElementById('progressPercent');
+const progressParts = document.getElementById('progressParts');
+const progressStatus = document.getElementById('progressStatus');
+
+// Session variables
+let sessionId = localStorage.getItem('video_splitter_session');
+let currentEventSource = null;
 
 // Hamburger menu toggle
 function toggleSidebar() {
@@ -253,9 +264,23 @@ async function uploadVideo(retryCount = 0) {
     resultsSection.style.display = 'none';
     errorSection.style.display = 'none';
 
+    // Generate job_id before upload starts
+    const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+    // Start progress tracking BEFORE upload
+    if (typeof startProgressTracking === 'function') {
+        startProgressTracking(jobId);
+    }
+
     const formData = new FormData();
     formData.append('video', selectedFile);
     formData.append('duration', selectedDuration);
+    formData.append('job_id', jobId);  // Send job_id to backend
+
+    // Add session ID if exists
+    if (sessionId) {
+        formData.append('session_id', sessionId);
+    }
 
     try {
         const response = await fetch('/upload', {
@@ -266,6 +291,11 @@ async function uploadVideo(retryCount = 0) {
         const data = await response.json();
 
         if (!response.ok) {
+            // Stop progress tracking on error
+            if (typeof stopProgressTracking === 'function') {
+                stopProgressTracking();
+            }
+
             // Check if it's a rate limit error
             if (response.status === 429) {
                 const retryAfter = response.headers.get('Retry-After') || 60;
@@ -274,6 +304,13 @@ async function uploadVideo(retryCount = 0) {
             }
 
             throw new Error(data.error || 'Upload failed');
+        }
+
+        if (data.session_id) {
+            sessionId = data.session_id;
+            localStorage.setItem('video_splitter_session', sessionId);
+            // Refresh history (TODO: implement loadHistory function)
+            // loadHistory();
         }
 
         // Show results
