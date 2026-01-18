@@ -37,15 +37,8 @@ const desktopThemeToggle = document.getElementById('desktopThemeToggle');
 const desktopThemeButtons = desktopThemeToggle.querySelectorAll('.theme-toggle-btn');
 const recentUploads = document.getElementById('recentUploads');
 
-// Progress bar elements
-const progressBar = document.getElementById('progressBar');
-const progressPercent = document.getElementById('progressPercent');
-const progressParts = document.getElementById('progressParts');
-const progressStatus = document.getElementById('progressStatus');
-
 // Session variables
 let sessionId = localStorage.getItem('video_splitter_session');
-let currentEventSource = null;
 
 // Hamburger menu toggle
 function toggleSidebar() {
@@ -264,18 +257,9 @@ async function uploadVideo(retryCount = 0) {
     resultsSection.style.display = 'none';
     errorSection.style.display = 'none';
 
-    // Generate job_id before upload starts
-    const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-    // Start progress tracking BEFORE upload
-    if (typeof startProgressTracking === 'function') {
-        startProgressTracking(jobId);
-    }
-
     const formData = new FormData();
     formData.append('video', selectedFile);
     formData.append('duration', selectedDuration);
-    formData.append('job_id', jobId);  // Send job_id to backend
 
     // Add session ID if exists
     if (sessionId) {

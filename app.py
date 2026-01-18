@@ -42,27 +42,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
-# Global progress tracker for SSE
-progress_tracker = {}
-
 # Session storage
 user_sessions = {}
-
-def update_progress(job_id, percent, message, status='processing', current_part=None, total_parts=None):
-    """Update progress for a job"""
-    progress_tracker[job_id] = {
-        'percent': percent,
-        'message': message,
-        'status': status,
-        'current_part': current_part,
-        'total_parts': total_parts,
-        'timestamp': time.time()
-    }
-
-def clear_progress(job_id):
-    """Clear progress data after completion"""
-    if job_id in progress_tracker:
-        del progress_tracker[job_id]
 
 # Create necessary directories
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
